@@ -42,21 +42,34 @@
 # define unlikely(p) (!!(p))
 #endif
 
+/** Current version */
+#define ENW_VERSION_MAJOR 0
+#define ENW_VERSION_MINOR 1
+
+
 /**
- * Global configuration variables
+ * Global configuration
  */
-LOCAL int   enw_initialized = 0;
-LOCAL int   enw_verbosity = 1;
+LOCAL struct {
+  int initialized;
+  unsigned verbosity;
+
+  /* Pointers to the original functions */
+  struct {
+    int   (*clearenv)(void);
+    char* (*getenv)(const char *);
+    int   (*putenv)(char *);
+    int   (*setenv)(const char *, const char *, int);
+    int   (*unsetenv)(const char *);
+  } funcs;
+
+} enw_config = { .initialized = 0,
+                 .verbosity = 1 };
 
 /**
  * Global function pointers
  */
 
-LOCAL int   (*enw_clearenv)(void) = NULL;
-LOCAL char* (*enw_getenv)(const char *) = NULL;
-LOCAL int   (*enw_putenv)(char *) = NULL;
-LOCAL int   (*enw_setenv)(const char *, const char *, int) = NULL;
-LOCAL int   (*enw_unsetenv)(const char *) = NULL;
 
 /**
  * The logging levels from error to debug
@@ -77,7 +90,7 @@ static const char *psz_log_level[] =
 
 
 #define PROLOGUE()                                  \
-  if(unlikely(!enw_initialized))                    \
+  if(unlikely(!enw_config.initialized))             \
     enw_init();                                     \
   enw_log(DEBUG, "Calling '%s'", __func__);
 
@@ -89,7 +102,7 @@ static const char *psz_log_level[] =
  */
 static inline void enw_log(log_level level, const char *psz_fmt, ...)
 {
-  if(unlikely(level <= enw_verbosity))
+  if(unlikely(level <= enw_config.verbosity))
   {
     if(level > 3) level = 3;
 
@@ -115,22 +128,27 @@ LOCAL void __attribute__ ((constructor)) enw_init(void)
     In this case the hook should call the constructor and then continue to
     execute the right code.
   */
-  if(enw_initialized)
+  if(enw_config.initialized)
     return;
-  enw_initialized = 1;
+  enw_config.initialized = 1;
 
   /* Resolve the symboles that we will need afterward */
-  enw_clearenv  = dlsym(RTLD_NEXT, "clearenv");
-  enw_getenv    = dlsym(RTLD_NEXT, "getenv");
-  enw_putenv    = dlsym(RTLD_NEXT, "putenv");
-  enw_setenv    = dlsym(RTLD_NEXT, "setenv");
-  enw_unsetenv  = dlsym(RTLD_NEXT, "unsetenv");
+#define HOOK(name) enw_config.funcs.name = dlsym(RTLD_NEXT, #name)
+  HOOK(clearenv);
+  HOOK(getenv);
+  HOOK(putenv);
+  HOOK(setenv);
+  HOOK(unsetenv);
+#undef HOOK
 
   /* Fetch the configuration from the environment variables */
-  const char *psz_verbosity = enw_getenv("ENW_VERBOSITY");
+  const char *psz_verbosity = enw_config.funcs.getenv("ENW_VERBOSITY");
   if(psz_verbosity)
-    enw_verbosity = atoi(psz_verbosity);
+    enw_config.verbosity = atoi(psz_verbosity);
 
+  /* Print some information about the configuration */
+  enw_log(DEBUG, "env watcher v%d.%d initialization finished with:", ENW_VERSION_MAJOR, ENW_VERSION_MINOR);
+  enw_log(DEBUG, " * verbosity=%d", enw_config.verbosity);
 }
 
 
@@ -141,7 +159,7 @@ GLOBAL int clearenv(void)
 {
   PROLOGUE();
 
-  return enw_clearenv();
+  return enw_config.funcs.clearenv();
 }
 
 
@@ -152,7 +170,7 @@ GLOBAL char *getenv(const char *name)
 {
   PROLOGUE();
 
-  char *value = enw_getenv(name);
+  char *value = enw_config.funcs.getenv(name);
 
   enw_log(DEBUG, "\t%s => %s", name, value);
 
@@ -169,7 +187,7 @@ GLOBAL int putenv(char *string)
 
   enw_log(DEBUG, "\t%s", string);
 
-  return enw_putenv(string);
+  return enw_config.funcs.putenv(string);
 }
 
 
@@ -182,7 +200,7 @@ GLOBAL int setenv(const char *name, const char *value, int overwrite)
 
   enw_log(DEBUG, "\t%s => %s (%d)", name, value, overwrite);
 
-  return enw_setenv(name, value, overwrite);
+  return enw_config.funcs.setenv(name, value, overwrite);
 }
 
 
@@ -195,5 +213,5 @@ GLOBAL int unsetenv(const char *name)
 
   enw_log(DEBUG, "\t%s", name);
 
- return enw_unsetenv(name);
+ return enw_config.funcs.unsetenv(name);
 }
