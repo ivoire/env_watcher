@@ -235,7 +235,29 @@ GLOBAL int putenv(char *string)
   PROLOGUE();
 
   enw_log(DEBUG, "\t%s", string);
-  return enw_config.funcs.putenv(string);
+  int result = enw_config.funcs.putenv(string);
+
+  if(result)
+    return result;
+
+  /* Copy the string to manipulate it */
+  char *str = strdup(string);
+  char* end = strchr(str, '=');
+  if(end)
+  {
+    *end = '\0';
+    struct variable *var;
+    HASH_FIND_STR(enw_config.vars, str, var);
+    if(!var)
+    {
+      var = malloc(sizeof(*var));
+      var->name = strdup(str);
+      var->value = strdup(end + 1);
+      HASH_ADD_KEYPTR(hh, enw_config.vars, var->name, strlen(var->name), var);
+    }
+  }
+  free(str);
+  return result;
 }
 
 
