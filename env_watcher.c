@@ -22,6 +22,9 @@
 #define __USE_GNU
 #include <dlfcn.h>
 
+#include <uthash.h>
+
+
 /**
  * Hide most symboles by default and export only the hooks
  */
@@ -50,9 +53,17 @@
 /**
  * Global configuration
  */
+struct variable {
+  char *name;         /* key for the hash table */
+  char *value;
+  UT_hash_handle hh;  /* make the structure hashable for uthash */
+};
+
 LOCAL struct {
   int initialized;
   unsigned verbosity;
+
+  struct variable *vars;
 
   /* Pointers to the original functions */
   struct {
@@ -64,11 +75,8 @@ LOCAL struct {
   } funcs;
 
 } enw_config = { .initialized = 0,
-                 .verbosity = 1 };
-
-/**
- * Global function pointers
- */
+                 .verbosity = 1,
+                 .vars = NULL };
 
 
 /**
@@ -117,6 +125,27 @@ static inline void enw_log(log_level level, const char *psz_fmt, ...)
 
 
 /**
+ * Destructor function that dump the results
+ */
+LOCAL void enw_fini(void)
+{
+  FILE *fd = fopen("results", "w+");
+  if(fd < 0)
+    return;
+
+  fprintf(fd, "Env watcher results\n");
+  fprintf(fd, "===================\n");
+
+  struct variable *var;
+  for(var = enw_config.vars; var != NULL; var = var->hh.next)
+  {
+    fprintf(fd, "%s=%s\n", var->name, var->value);
+  }
+  fclose(fd);
+}
+
+
+/**
  * Constructor function that read the environment variables
  */
 LOCAL void __attribute__ ((constructor)) enw_init(void)
@@ -146,6 +175,9 @@ LOCAL void __attribute__ ((constructor)) enw_init(void)
   if(psz_verbosity)
     enw_config.verbosity = atoi(psz_verbosity);
 
+  /* Register the atexit function */
+  atexit(enw_fini);
+
   /* Print some information about the configuration */
   enw_log(DEBUG, "env watcher v%d.%d initialization finished with:", ENW_VERSION_MAJOR, ENW_VERSION_MINOR);
   enw_log(DEBUG, " * verbosity=%d", enw_config.verbosity);
@@ -171,8 +203,21 @@ GLOBAL char *getenv(const char *name)
   PROLOGUE();
 
   char *value = enw_config.funcs.getenv(name);
-
   enw_log(DEBUG, "\t%s => %s", name, value);
+
+  if(!value)
+    return NULL;
+
+  /* Add the key to the hash table */
+  struct variable *var;
+  HASH_FIND_STR(enw_config.vars, name, var);
+  if(!var)
+  {
+    var = malloc(sizeof(*var));
+    var->name = strdup(name);
+    var->value = strdup(value);
+    HASH_ADD_KEYPTR(hh, enw_config.vars, var->name, strlen(var->name), var);
+  }
 
   return value;
 }
@@ -186,7 +231,6 @@ GLOBAL int putenv(char *string)
   PROLOGUE();
 
   enw_log(DEBUG, "\t%s", string);
-
   return enw_config.funcs.putenv(string);
 }
 
@@ -199,6 +243,23 @@ GLOBAL int setenv(const char *name, const char *value, int overwrite)
   PROLOGUE();
 
   enw_log(DEBUG, "\t%s => %s (%d)", name, value, overwrite);
+
+  /* Add the key to the hash table */
+  struct variable *var;
+  HASH_FIND_STR(enw_config.vars, name, var);
+  if(!var)
+  {
+    var = malloc(sizeof(*var));
+    var->name = strdup(name);
+    var->value = strdup(value);
+    HASH_ADD_KEYPTR(hh, enw_config.vars, var->name, strlen(var->name), var);
+  }
+  /* Only overwrite the value is required */
+  else if(overwrite)
+  {
+    free(var->value);
+    var->value = strdup(value);
+  }
 
   return enw_config.funcs.setenv(name, value, overwrite);
 }
