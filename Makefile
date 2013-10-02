@@ -2,8 +2,8 @@ RM      = rm
 INSTALL = install
 PREFIX  = /usr/local
 CC      = gcc
-CFLAGS  = -Wall -O2
-LDFLAGS = -ldl -lrt -lm -fPIC
+CFLAGS  += -Wall -O2 -g
+LDFLAGS += -ldl -fPIC
 
 
 env_watcher.so: env_watcher.c Makefile
