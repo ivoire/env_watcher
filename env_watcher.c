@@ -130,7 +130,7 @@ static inline void enw_log(log_level level, const char *psz_fmt, ...)
 LOCAL void enw_fini(void)
 {
   /* Get the name of the logfile from the environement */
-  const char *psz_logfile = enw_config.funcs.getenv("ENW_LOGFILE");
+  const char *psz_logfile = enw_config.funcs.getenv("ENW_RESULTS");
   if(!psz_logfile) psz_logfile = "results";
 
   FILE *fd = fopen(psz_logfile, "w+");
