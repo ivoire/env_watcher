@@ -131,19 +131,19 @@ LOCAL void enw_fini(void)
 {
   /* Get the name of the logfile from the environement */
   const char *psz_logfile = enw_config.funcs.getenv("ENW_RESULTS");
-  if(!psz_logfile) psz_logfile = "results";
+  if(!psz_logfile) psz_logfile = "results.yaml";
 
   FILE *fd = fopen(psz_logfile, "w+");
   if(fd < 0)
     return;
 
-  fprintf(fd, "Env watcher results\n");
-  fprintf(fd, "===================\n");
+  fprintf(fd, "variable:\n");
 
   struct variable *var;
   for(var = enw_config.vars; var != NULL; var = var->hh.next)
   {
-    fprintf(fd, "%s=%s\n", var->name, var->value);
+    fprintf(fd, "  - name: %s\n", var->name);
+    fprintf(fd, "    value: %s\n", var->value);
   }
   fclose(fd);
 }
