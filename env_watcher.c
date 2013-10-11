@@ -18,6 +18,7 @@
 #include <stdarg.h>         /* va_list, va_args, */
 #include <stdio.h>          /* fprintf, */
 #include <stdlib.h>         /* atoi, getenv */
+#include <stdbool.h>        /* true */
 
 #define __USE_GNU
 #include <dlfcn.h>
@@ -53,9 +54,18 @@
 /**
  * Global configuration
  */
+typedef struct {
+  unsigned int create :1;
+  unsigned int read   :1;
+  unsigned int update :1;
+  unsigned int delete :1;
+} Actions;
+
+
 struct variable {
   char *name;         /* key for the hash table */
-  char *value;
+  char *value;        /* environment variable value */
+  Actions actions;
   UT_hash_handle hh;  /* make the structure hashable for uthash */
 };
 
@@ -129,7 +139,7 @@ static inline void enw_log(log_level level, const char *psz_fmt, ...)
  */
 LOCAL void enw_fini(void)
 {
-  /* Get the name of the logfile from the environement */
+  /* Get the name of the logfile from the environment */
   const char *psz_logfile = enw_config.funcs.getenv("ENW_RESULTS");
   if(!psz_logfile) psz_logfile = "results.yaml";
 
@@ -144,6 +154,8 @@ LOCAL void enw_fini(void)
   {
     fprintf(fd, "  - name: %s\n", var->name);
     fprintf(fd, "    value: %s\n", var->value);
+    fprintf(fd, "    actions: %d%d%d%d\n", var->actions.create,
+            var->actions.read, var->actions.update, var->actions.delete);
   }
   fclose(fd);
 }
@@ -217,10 +229,15 @@ GLOBAL char *getenv(const char *name)
   HASH_FIND_STR(enw_config.vars, name, var);
   if(!var)
   {
-    var = malloc(sizeof(*var));
+    var = calloc(1, sizeof(*var));
     var->name = strdup(name);
     var->value = strdup(value);
+    var->actions.read = true;
     HASH_ADD_KEYPTR(hh, enw_config.vars, var->name, strlen(var->name), var);
+  }
+  else
+  {
+    var->actions.read = true;
   }
 
   return value;
@@ -234,7 +251,7 @@ GLOBAL int putenv(char *string)
 {
   PROLOGUE();
 
-  enw_log(DEBUG, "\t%s", string);
+  enw_log(DEBUG, "\tstring='%s'", string);
   int result = enw_config.funcs.putenv(string);
 
   if(result)
@@ -247,13 +264,21 @@ GLOBAL int putenv(char *string)
   {
     *end = '\0';
     struct variable *var;
+    enw_log(DEBUG, "\t'%s'='%s'\n", str, end + 1);
     HASH_FIND_STR(enw_config.vars, str, var);
     if(!var)
     {
-      var = malloc(sizeof(*var));
+      var = calloc(1, sizeof(*var));
       var->name = strdup(str);
       var->value = strdup(end + 1);
+      var->actions.create = true;
       HASH_ADD_KEYPTR(hh, enw_config.vars, var->name, strlen(var->name), var);
+    }
+    else
+    {
+      free(var->value);
+      var->value = strdup(end + 1);
+      var->actions.update = true;
     }
   }
   free(str);
@@ -275,16 +300,18 @@ GLOBAL int setenv(const char *name, const char *value, int overwrite)
   HASH_FIND_STR(enw_config.vars, name, var);
   if(!var)
   {
-    var = malloc(sizeof(*var));
+    var = calloc(1, sizeof(*var));
     var->name = strdup(name);
     var->value = strdup(value);
+    var->actions.create = true;
     HASH_ADD_KEYPTR(hh, enw_config.vars, var->name, strlen(var->name), var);
   }
-  /* Only overwrite the value is required */
+  /* Only overwrite the value if required */
   else if(overwrite)
   {
     free(var->value);
     var->value = strdup(value);
+    var->actions.update = true;
   }
 
   return enw_config.funcs.setenv(name, value, overwrite);
@@ -299,6 +326,13 @@ GLOBAL int unsetenv(const char *name)
   PROLOGUE();
 
   enw_log(DEBUG, "\t%s", name);
+
+  struct variable *var;
+  HASH_FIND_STR(enw_config.vars, name, var);
+  if(var)
+  {
+    var->actions.delete = true;
+  }
 
  return enw_config.funcs.unsetenv(name);
 }
