@@ -12,7 +12,7 @@ The library must be used through the **LD_PRELOAD** mechanism:
     LD_PRELOAD=$INSTALL_PATH/env_watcher.so my_program
 
 In this case, env_watcher will log the environment variables used and print the
-result in a file called **results** in the current directory.
+result in a file called **results.yaml** in the current directory.
 
 Available options
 -----------------
