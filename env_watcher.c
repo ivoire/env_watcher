@@ -19,6 +19,7 @@
 #include <stdio.h>          /* fprintf, */
 #include <stdlib.h>         /* atoi, getenv */
 #include <stdbool.h>        /* true */
+#include <unistd.h>         /* getpid */
 
 #define __USE_GNU
 #include <dlfcn.h>
@@ -138,7 +139,7 @@ static inline void enw_log(log_level level, const char *psz_fmt, ...)
  */
 LOCAL void enw_fini(void)
 {
-  enw_log(DEBUG, "Dumping the result file");
+  enw_log(DEBUG, "Dumping the result file for %d", getpid());
   /* Get the name of the logfile from the environment */
   const char *psz_logfile = enw_config.funcs.getenv("ENW_RESULTS");
   if(!psz_logfile) psz_logfile = "results.yaml";
@@ -147,13 +148,15 @@ LOCAL void enw_fini(void)
   if(fd < 0)
     return;
 
-  fprintf(fd, "variable:\n");
+  fprintf(fd, "- result:\n");
+  fprintf(fd, "  pid: %d\n", getpid());
+  fprintf(fd, "  variables:\n");
 
   struct variable *var;
   for(var = enw_config.vars; var != NULL; var = var->hh.next)
   {
-    fprintf(fd, "  - name: %s\n", var->name);
-    fprintf(fd, "    value: %s\n", var->value);
+    fprintf(fd, "  - name: \"%s\"\n", var->name);
+    fprintf(fd, "    value: \"%s\"\n", var->value);
     fprintf(fd, "    actions: %d%d%d%d\n", var->actions.create,
             var->actions.read, var->actions.update, var->actions.delete);
   }
