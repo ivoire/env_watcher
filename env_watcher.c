@@ -109,8 +109,7 @@ static const char *psz_log_level[] =
 
 #define PROLOGUE()                                  \
   if(unlikely(!enw_config.initialized))             \
-    enw_init();                                     \
-  enw_log(DEBUG, "Calling '%s'", __func__);
+    enw_init();
 
 /**
  * Logging function for the env_watcher library
@@ -139,11 +138,12 @@ static inline void enw_log(log_level level, const char *psz_fmt, ...)
  */
 LOCAL void enw_fini(void)
 {
+  enw_log(DEBUG, "Dumping the result file");
   /* Get the name of the logfile from the environment */
   const char *psz_logfile = enw_config.funcs.getenv("ENW_RESULTS");
   if(!psz_logfile) psz_logfile = "results.yaml";
 
-  FILE *fd = fopen(psz_logfile, "w+");
+  FILE *fd = fopen(psz_logfile, "a");
   if(fd < 0)
     return;
 
@@ -195,8 +195,11 @@ LOCAL void __attribute__ ((constructor)) enw_init(void)
   atexit(enw_fini);
 
   /* Print some information about the configuration */
+  enw_log(DEBUG, "");
+  enw_log(DEBUG, "================================================");
   enw_log(DEBUG, "env watcher v%d.%d initialization finished with:", ENW_VERSION_MAJOR, ENW_VERSION_MINOR);
   enw_log(DEBUG, " * verbosity=%d", enw_config.verbosity);
+  enw_log(DEBUG, "================================================");
 }
 
 
@@ -206,6 +209,7 @@ LOCAL void __attribute__ ((constructor)) enw_init(void)
 GLOBAL int clearenv(void)
 {
   PROLOGUE();
+  enw_log(DEBUG, "clearenv()");
 
   return enw_config.funcs.clearenv();
 }
@@ -217,9 +221,10 @@ GLOBAL int clearenv(void)
 GLOBAL char *getenv(const char *name)
 {
   PROLOGUE();
+  enw_log(DEBUG, "getenv(%s)", name);
 
   char *value = enw_config.funcs.getenv(name);
-  enw_log(DEBUG, "\t%s => %s", name, value);
+  enw_log(DEBUG, " -> %s", value);
 
   if(!value)
     return NULL;
@@ -250,8 +255,8 @@ GLOBAL char *getenv(const char *name)
 GLOBAL int putenv(char *string)
 {
   PROLOGUE();
+  enw_log(DEBUG, "putenv(%s)", string);
 
-  enw_log(DEBUG, "\tstring='%s'", string);
   int result = enw_config.funcs.putenv(string);
 
   if(result)
@@ -264,7 +269,8 @@ GLOBAL int putenv(char *string)
   {
     *end = '\0';
     struct variable *var;
-    enw_log(DEBUG, "\t'%s'='%s'\n", str, end + 1);
+    enw_log(DEBUG, " -> %s", str);
+    enw_log(DEBUG, " -> %s", end + 1);
     HASH_FIND_STR(enw_config.vars, str, var);
     if(!var)
     {
@@ -292,8 +298,7 @@ GLOBAL int putenv(char *string)
 GLOBAL int setenv(const char *name, const char *value, int overwrite)
 {
   PROLOGUE();
-
-  enw_log(DEBUG, "\t%s => %s (%d)", name, value, overwrite);
+  enw_log(DEBUG, "setenv(%s, %s, %d)", name, value, overwrite);
 
   /* Add the key to the hash table */
   struct variable *var;
@@ -325,7 +330,7 @@ GLOBAL int unsetenv(const char *name)
 {
   PROLOGUE();
 
-  enw_log(DEBUG, "\t%s", name);
+  enw_log(DEBUG, "unsetenv(%s)", name);
 
   struct variable *var;
   HASH_FIND_STR(enw_config.vars, name, var);
